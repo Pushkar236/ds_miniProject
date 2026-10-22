@@ -1,0 +1,73 @@
+# TicketRush on one machine.
+#   docker compose up --build        # nginx -> 2 gateways -> 3 booking replicas, 2 payment workers
+#   docker compose up -d --scale booking=5 --scale payment-worker=4 --scale gateway=3   # scale out live
+# Dashboard: http://localhost:8080
+
+name: ticketrush
+
+x-app: &app
+  build: .
+  image: ticketrush:latest
+  restart: unless-stopped
+  environment: &env
+    REDIS_URL: redis://redis:6379/0
+    DATABASE_URL: postgresql://ticketrush:ticketrush@postgres:5432/ticketrush
+    CATALOG_URL: http://catalog:8000
+    BOOKING_URL: http://booking:8000
+  depends_on:
+    redis: { condition: service_healthy }
+    postgres: { condition: service_healthy }
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+    volumes: ["redis-data:/data"]
+
+  postgres:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=300"]
+    environment:
+      POSTGRES_USER: ticketrush
+      POSTGRES_PASSWORD: ticketrush
+      POSTGRES_DB: ticketrush
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketrush"]
+      interval: 2s
+      retries: 30
+    volumes: ["pg-data:/var/lib/postgresql/data"]
+
+  catalog:
+    <<: *app
+    command: ["uvicorn", "app.catalog.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  booking:
+    <<: *app
+    command: ["uvicorn", "app.booking.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    deploy: { replicas: 3 }
+
+  payment-worker:
+    <<: *app
+    command: ["python", "-m", "app.payment.worker"]
+    deploy: { replicas: 2 }
+
+  gateway:
+    <<: *app
+    command: ["uvicorn", "app.gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on: [catalog, booking]
+    deploy: { replicas: 2 }
+
+  lb:
+    image: nginx:1.27-alpine
+    volumes: ["./nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    ports: ["8080:80"]
+    depends_on: [gateway]
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  pg-data:

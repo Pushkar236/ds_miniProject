@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-worker
+  namespace: ticketrush
+  labels: { app: payment-worker }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: payment-worker }
+  template:
+    metadata:
+      labels: { app: payment-worker }
+    spec:
+      # Anything a killed worker left unacknowledged is reclaimed by its peers (XAUTOCLAIM).
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: payment-worker
+          image: ticketrush:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.payment.worker"]
+          envFrom:
+            - configMapRef: { name: ticketrush-config }
+            - secretRef: { name: ticketrush-db }
+          resources:
+            requests: { cpu: 100m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+# CPU-based autoscaling for workers (fraud scoring is CPU-bound). To scale on queue
+# length instead, see optional/keda-payment-scaler.yaml.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: payment-worker
+  namespace: ticketrush
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: payment-worker }
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

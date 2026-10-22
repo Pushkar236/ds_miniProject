@@ -1,0 +1,25 @@
+# Service discovery: the app only knows DNS names; Kubernetes resolves them to pod IPs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketrush-config
+  namespace: ticketrush
+data:
+  REDIS_URL: redis://redis:6379/0
+  CATALOG_URL: http://catalog:8000
+  BOOKING_URL: http://booking:8000
+  HOLD_SECONDS: "120"
+  PAYMENT_FAIL_RATE: "0.10"
+  WORKER_CONCURRENCY: "20"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ticketrush-db
+  namespace: ticketrush
+type: Opaque
+stringData:
+  POSTGRES_USER: ticketrush
+  POSTGRES_PASSWORD: ticketrush
+  POSTGRES_DB: ticketrush
+  DATABASE_URL: postgresql://ticketrush:ticketrush@postgres:5432/ticketrush

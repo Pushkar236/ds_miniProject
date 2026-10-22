@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TicketRush Control Room</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">TR</span>
+    <div>
+      <h1>TicketRush</h1>
+      <p class="sub">Distributed flash-sale ticketing &middot; control room</p>
+    </div>
+  </div>
+  <div class="conn"><span id="ws-dot" class="dot"></span><span id="ws-label">connecting…</span>
+    <span class="muted">&middot; gateway <code id="gateway-id">?</code></span></div>
+</header>
+
+<main>
+  <section class="panel events">
+    <div class="panel-head">
+      <h2>Events</h2>
+      <form id="new-event" class="inline-form">
+        <input name="name" placeholder="New event name" required>
+        <input name="venue" placeholder="City" required>
+        <input name="capacity" type="number" min="1" value="200" title="Capacity">
+        <button type="submit">Create</button>
+      </form>
+    </div>
+    <div id="events" class="event-grid"></div>
+  </section>
+
+  <section class="panel sale">
+    <div class="panel-head"><h2>Flash sale simulator</h2></div>
+    <p class="muted small">Fires many booking requests through the gateway. Each request opens a new upstream
+      connection, so the requests spread across every booking replica.</p>
+    <form id="sale-form" class="inline-form">
+      <label>Event <select name="event" id="sale-event"></select></label>
+      <label>Requests <input name="requests" type="number" min="1" max="5000" value="400"></label>
+      <label>Parallel <input name="parallel" type="number" min="1" max="64" value="24"></label>
+      <button type="submit" id="sale-btn">Start rush</button>
+    </form>
+    <div id="sale-result" class="sale-result"></div>
+  </section>
+
+  <section class="panel cluster">
+    <div class="panel-head"><h2>Cluster</h2>
+      <button id="reset-stats" class="ghost small">Reset counters</button></div>
+    <div class="queue" id="queue"></div>
+    <h3>Booking replicas <span class="muted small">(stateless, behind one service name)</span></h3>
+    <div id="booking-replicas" class="replicas"></div>
+    <h3>Payment workers <span class="muted small">(consumer group <code>payments</code>)</span></h3>
+    <div id="payment-replicas" class="replicas"></div>
+  </section>
+
+  <section class="panel feed">
+    <div class="panel-head"><h2>Live activity</h2><span class="muted small">Redis pub/sub &rarr; WebSocket</span></div>
+    <ul id="feed"></ul>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

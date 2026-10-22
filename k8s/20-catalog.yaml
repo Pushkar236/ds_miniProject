@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: ticketrush
+  labels: { app: catalog }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: catalog }
+  template:
+    metadata:
+      labels: { app: catalog }
+    spec:
+      containers:
+        - name: catalog
+          image: ticketrush:latest
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.catalog.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          envFrom:
+            - configMapRef: { name: ticketrush-config }
+            - secretRef: { name: ticketrush-db }
+          ports: [{ containerPort: 8000 }]
+          # The app connects to Redis/PostgreSQL before serving /healthz; give it up to 2 min.
+          startupProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 2
+            failureThreshold: 60
+          # Probe timeouts must tolerate a busy event loop: if pods flap to unready under load,
+          # the HPA cannot read their CPU and stops scaling exactly when it is needed.
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness only restarts a pod that is truly stuck, never one that is merely busy.
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: ticketrush
+spec:
+  selector: { app: catalog }
+  ports: [{ port: 8000 }]

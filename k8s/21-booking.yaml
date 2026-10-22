@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking
+  namespace: ticketrush
+  labels: { app: booking }
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: booking }
+  template:
+    metadata:
+      labels: { app: booking }
+    spec:
+      containers:
+        - name: booking
+          image: ticketrush:latest
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.booking.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          envFrom:
+            - configMapRef: { name: ticketrush-config }
+            - secretRef: { name: ticketrush-db }
+          ports: [{ containerPort: 8000 }]
+          # The app connects to Redis/PostgreSQL before serving /healthz; give it up to 2 min.
+          startupProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 2
+            failureThreshold: 60
+          # Probe timeouts must tolerate a busy event loop: if pods flap to unready under load,
+          # the HPA cannot read their CPU and stops scaling exactly when it is needed.
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness only restarts a pod that is truly stuck, never one that is merely busy.
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 200m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+# ClusterIP Service = built-in load balancer across all booking pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking
+  namespace: ticketrush
+spec:
+  selector: { app: booking }
+  ports: [{ port: 8000 }]
+---
+# Horizontal Pod Autoscaler: adds booking pods when average CPU passes 60% of the request.
+# Needs metrics-server (minikube: `minikube addons enable metrics-server`).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: booking
+  namespace: ticketrush
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: booking }
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 60 }
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60

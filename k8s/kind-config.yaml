@@ -1,0 +1,12 @@
+# Local multi-node Kubernetes cluster in Docker (https://kind.sigs.k8s.io):
+#   kind create cluster --name ticketrush --config k8s/kind-config.yaml
+# The dashboard NodePort (30080) is published on http://localhost:30080
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+  - role: worker
+  - role: worker

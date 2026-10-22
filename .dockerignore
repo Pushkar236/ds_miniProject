@@ -1,0 +1,6 @@
+**/__pycache__
+*.pyc
+k8s
+docs
+tools
+.git
